@@ -1,22 +1,58 @@
-from fastapi import FastAPI
+from fastapi import FastAPI,Header, HTTPException
+import pandas as pd
 import ssl
 import requests
 import time
 import dns.resolver
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from bs4 import BeautifulSoup as bs
 import socket
 import json
 import whois
 from requests_html import HTMLSession
 from bs4 import BeautifulSoup
-wd="rajagiritech.ac.in"
+from urllib.parse import urljoin
+from supabase import create_client, Client
+import os
+from typing import Optional
+wd=""
+API_URL = 'https://mohcxviiclxxhwbvdzog.supabase.co'
+API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vaGN4dmlpY2x4eGh3YnZkem9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzU5MTM5ODgsImV4cCI6MTk5MTQ4OTk4OH0.ahfdv9QG5Pdi2qWh4n4CJ3wMfZiE0bYhWkH_6Fkj2d8'
 app=FastAPI( title="VSAT API",
     description="VSAT API is built with FastAPI to perform various security scans and return the output 🚀",
     version="1.0.0",)
+async def authenticate_api_key(api_key):
+    supabase= create_client(API_URL,API_KEY)
+    response = supabase.table('api').select("token","domain").execute()
+    df = pd.DataFrame(response.data)
+    #print(df)
+    #print(response)
+    ind=len(df.index)
+    tokenval=df['token']
+    domainval=df['domain']
+    #inittok=tokenval[0]
+    #print(inittok)
+    #initdomain=domainval[0]
+    flag=False
+    for i in range(0,ind):
+        if tokenval[i] == api_key:
+            flag=True
+            wd=domainval[i]
+    if flag==False:
+        #raise HTTPException(status_code=200, detail="Valid API key")
+    #else:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+        
 @app.get("/")
-async def home():
+async def home(api_key: Optional[str] = Header(None, alias="X-API-KEY")):
+    await authenticate_api_key(api_key)
+
     return{"Welcome to VSAT API. Visit /docs for the API documentation"}
 @app.get("/hostname",summary="Returns the ip address for the hostname")
-async def get_hostname_info():
+async def get_hostname_info(api_key: Optional[str] = Header(None, alias="X-API-KEY")):
+    await authenticate_api_key(api_key)
     try:
         socket.gethostbyname(wd)
         a=socket.gethostbyname(wd)
@@ -26,14 +62,15 @@ async def get_hostname_info():
     
 
 @app.get("/sslinfo",summary="Returns the SSL information of your domain")    
-async def get_ssl_info():
+async def get_ssl_info(api_key: Optional[str] = Header(None, alias="X-API-KEY")):
     with socket.create_connection((wd, 443)) as sock:
         context = ssl.create_default_context()
         with context.wrap_socket(sock, server_hostname=wd) as ssock:
             cert = ssock.getpeercert()
         return(cert)
 @app.get("/dnsinfo",summary="Lists the DNS records of your domain")        
-async def get_dns_records_info():
+async def get_dns_records_info(api_key: Optional[str] = Header(None, alias="X-API-KEY")):
+    await authenticate_api_key(api_key)
     dnsd={}
     ids = [
         'NONE',
@@ -120,7 +157,8 @@ async def get_dns_records_info():
 # -------Web security scans----------
 
 @app.get("/httpsecheader")
-async def get_hsts():
+async def get_hsts(api_key: Optional[str] = Header(None, alias="X-API-KEY")):
+    await authenticate_api_key(api_key)
     ur='https://'+wd
     hsd={}
     response = requests.get(ur)
@@ -181,7 +219,8 @@ async def get_hsts():
              hsd.update({'HttpOnly attribute not set' :  'fail!'})
     return(hsd)
 @app.get("/urlredirection")
-async def get_url_redirection():
+async def get_url_redirection(api_key: Optional[str] = Header(None, alias="X-API-KEY")):
+    await authenticate_api_key(api_key)
     links = []
     session = HTMLSession()
     ur='https://'+wd
@@ -202,7 +241,8 @@ async def get_url_redirection():
     return(links)
 
 @app.get("/wepagespeed")
-async def get_webpage_speed():
+async def get_webpage_speed(api_key: Optional[str] = Header(None, alias="X-API-KEY")):
+    await authenticate_api_key(api_key)
     start = time.time()
     response = requests.get('https://'+wd)
     end = time.time()
@@ -210,7 +250,8 @@ async def get_webpage_speed():
     return{"Time elapsed": elapsed_time}
 
 @app.get('/whoislookup')
-async def get_whois_info():
+async def get_whois_info(api_key: Optional[str] = Header(None, alias="X-API-KEY")):
+    await authenticate_api_key(api_key)
     wdict={}
     try:
         w = whois.whois(wd)
@@ -218,3 +259,112 @@ async def get_whois_info():
     except Exception as e:
         wdict.update({'Error getting WHOIS':wd})
     return (wdict)
+@app.get("/safeweb")
+async def get_safeweb(api_key: Optional[str] = Header(None, alias="X-API-KEY")):
+    await authenticate_api_key(api_key)
+    chrome_options = Options()
+
+    chrome_options.add_argument("--headless")
+
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+
+    url = "https://safeweb.norton.com/"
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.get(url)
+
+    webcheck = wd
+    e1 = driver.find_element(By.ID, 'appendedInputButton').send_keys(webcheck)
+    submit = driver.find_element(By.ID, 'homeSearchImg')
+
+    submit.click()
+    time.sleep(5)
+
+    result = driver.find_element(
+        By.XPATH, '//*[@id="bodyContent"]/div/div/div[3]/div[1]/div[1]/div[2]/div[1]/div/b')
+
+    return (result.text)
+@app.get("/phishtank")
+async def get_phishtank(api_key: Optional[str] = Header(None, alias="X-API-KEY")):
+    await authenticate_api_key(api_key)
+    pdict = {}
+    chrome_options = Options()
+
+    chrome_options.add_argument("--headless")
+
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+
+    url = "https://phishtank.org/"
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.get(url)
+
+    domain = wd
+    e1 = driver.find_element(By.NAME, 'isaphishurl').clear()
+
+    e3 = driver.find_element(By.NAME, 'isaphishurl').send_keys(domain)
+    submit = driver.find_element(
+        By.XPATH, '//*[@id="maincol"]/div/div[2]/form/p/input[2]')
+    submit.click()
+    time.sleep(3)
+
+    try:
+        submit = driver.find_element(
+            By.XPATH, '//*[@id="history"]/table[1]/tbody/tr/td[2]/h3/b')
+        pdict.update({"Site details": submit.text})
+        if submit.text == "":
+            submit = driver.find_element(By.XPATH, '//*[@id="widecol"]/div/h3')
+            pdict.update({"Site details": submit.text})
+
+    except:
+        submit = driver.find_element(
+            By.XPATH, '//*[@id="maincol"]/div/div[2]/form/p/b/tt')
+        pdict.update({"No phishing info about": submit.text})
+    return (pdict)
+@app.get("/xssbasic")
+async def get_xssbasic(api_key: Optional[str] = Header(None, alias="X-API-KEY")):
+    await authenticate_api_key(api_key)
+    xdict = {}
+    url = "https://"+wd
+
+# Step 1: Find all the forms in the page
+    soup = bs(requests.get(url).content, "html.parser")
+    forms = soup.find_all("form")
+    xdict.update({"Number of forms detected": len(forms)})
+
+    # Step 2: Try submitting a payload to each form and check for XSS vulnerability
+    js_script = "<script>alert(XSS)</script>"
+    for form in forms:
+        # Extract form details
+        action = form.attrs.get("action", "").lower()
+        method = form.attrs.get("method", "get").lower()
+        inputs = []
+        for input_tag in form.find_all("input"):
+            input_type = input_tag.attrs.get("type", "text")
+            input_name = input_tag.attrs.get("name")
+            inputs.append({"type": input_type, "name": input_name})
+        form_details = {"action": action, "method": method, "inputs": inputs}
+
+        # Submit payload to form
+        target_url = urljoin(url, action)
+        data = {}
+        for input in inputs:
+            if input["type"] == "text" or input["type"] == "search":
+                input["value"] = js_script
+            input_name = input.get("name")
+            input_value = input.get("value")
+            if input_name and input_value:
+                data[input_name] = input_value
+        if method == "post":
+            res = requests.post(target_url, data=data)
+        else:
+            res = requests.get(target_url, params=data)
+
+        # Check for XSS vulnerability
+        content = res.content.decode()
+        if js_script in content:
+            xdict.update({"XSS Detected": form_details})
+        else:
+            xdict.update({"XSS not detected on": url})
+    return (xdict)
+
