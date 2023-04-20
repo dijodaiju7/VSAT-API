@@ -36,6 +36,7 @@ async def authenticate_api_key(api_key):
     #print(inittok)
     #initdomain=domainval[0]
     flag=False
+    global wd
     for i in range(0,ind):
         if tokenval[i] == api_key:
             flag=True
